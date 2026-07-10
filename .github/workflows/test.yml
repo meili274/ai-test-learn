@@ -89,10 +89,11 @@ jobs:
       # ========== Step 5: 运行全量测试 ==========
       - name: 运行全量测试
         run: |
-          pytest tests/ -v --tb=short \
+          pytest tests/ -v --tb=long \
             --alluredir=reports/allure-results \
             --clean-alluredir \
-            --html=reports/report.html --self-contained-html
+            --html=reports/report.html --self-contained-html \
+            2>&1 | tee reports/pytest-output.log
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           AI_MODE: ${{ secrets.DEEPSEEK_API_KEY != '' && 'real' || 'mock' }}
@@ -103,7 +104,14 @@ jobs:
         run: |
           allure generate reports/allure-results -o reports/allure-report --clean
 
-      # ========== Step 7: 上传 HTML 报告 ==========
+      # ========== Step 7: 上传测试日志和报告 ==========
+      - name: 上传 pytest 详细日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-output-log
+          path: reports/pytest-output.log
+
       - name: 上传 pytest-html 报告
         if: always()
         uses: actions/upload-artifact@v4
