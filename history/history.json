@@ -1,0 +1,1 @@
+{"6adf97f83acf6453d4a6a4b1070f3754":{"statistic":{"failed":0,"broken":1,"skipped":0,"passed":0,"unknown":0,"total":1},"items":[{"uid":"fa9299d7b2e9fa9","status":"broken","statusDetails":"AttributeError: 'str' object has no attribute 'iter_parents'","time":{"start":1783704088484,"stop":1783704088484,"duration":0}}]}}
