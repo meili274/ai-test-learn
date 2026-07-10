@@ -1,0 +1,104 @@
+# ============================================
+# AI 自动化测试框架 — CI/CD 流水线
+# ============================================
+# 触发条件：
+#   push/PR 到 main → 自动跑全量测试
+#   每天凌晨 2:00 UTC → 定时巡检
+# ============================================
+
+name: AI API Test Suite
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    - cron: '0 2 * * *'  # 每天凌晨 2:00 UTC（北京时间 10:00）
+
+# 并发控制：同一分支多个提交只跑最新的
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ========== Step 1: 检出代码 ==========
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # ========== Step 2: 安装 Python ==========
+      - name: 安装 Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      # ========== Step 3: 安装依赖 ==========
+      - name: 安装 Python 依赖
+        run: pip install -r requirements.txt
+
+      # ========== Step 4: 安装 Allure CLI ==========
+      - name: 安装 Allure CLI
+        run: |
+          wget -q https://github.com/allure-framework/allure2/releases/download/2.32.0/allure-2.32.0.tgz
+          tar -xzf allure-2.32.0.tgz
+          echo "$PWD/allure-2.32.0/bin" >> $GITHUB_PATH
+          allure --version
+
+      # ========== Step 5: 运行全量测试 ==========
+      - name: 运行全量测试
+        run: |
+          pytest tests/ -v --tb=short \
+            --alluredir=reports/allure-results \
+            --clean-alluredir \
+            --html=reports/report.html --self-contained-html
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          AI_MODE: ${{ secrets.DEEPSEEK_API_KEY != '' && 'real' || 'mock' }}
+        # continue-on-error: 即使有失败也继续生成报告
+
+      # ========== Step 6: 生成 Allure 报告 ==========
+      - name: 生成 Allure 报告
+        if: always()
+        run: |
+          allure generate reports/allure-results -o reports/allure-report --clean
+
+      # ========== Step 7: 上传 HTML 报告 ==========
+      - name: 上传 pytest-html 报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-html-report
+          path: reports/report.html
+
+      # ========== Step 8: 上传 Allure 报告 ==========
+      - name: 上传 Allure 报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: reports/allure-report/
+
+      # ========== Step 9: 发布到 GitHub Pages ==========
+      - name: 发布 Allure 报告到 GitHub Pages
+        if: github.ref == 'refs/heads/main' && always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: reports/allure-report
+          keep_files: false
+          full_commit_message: "📊 自动发布 Allure 测试报告"
+
+      # ========== Step 10: 输出测试总结 ==========
+      - name: 📋 测试摘要
+        if: always()
+        run: |
+          echo "========================================="
+          echo "  报告地址：https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+          echo "  下载 artifact：在 Actions 页面查看 Attachments"
+          echo "========================================="
