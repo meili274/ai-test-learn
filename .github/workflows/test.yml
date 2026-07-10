@@ -21,6 +21,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# 权限设置：允许发布 GitHub Pages
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -44,11 +50,41 @@ jobs:
 
       # ========== Step 4: 安装 Allure CLI ==========
       - name: 安装 Allure CLI
+        id: install-allure
+        continue-on-error: true
         run: |
-          wget -q https://github.com/allure-framework/allure2/releases/download/2.32.0/allure-2.32.0.tgz
-          tar -xzf allure-2.32.0.tgz
-          echo "$PWD/allure-2.32.0/bin" >> $GITHUB_PATH
-          allure --version
+          set -e
+          ALLURE_VERSION="2.44.0"
+          echo "尝试安装 Allure ${ALLURE_VERSION} ..."
+
+          # 方法1：使用 .deb 包安装（Ubuntu 最稳定）
+          if command -v dpkg >/dev/null 2>&1; then
+            echo "方法1：使用 .deb 包安装"
+            curl -L --retry 3 --retry-delay 2 -o allure.deb "https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure_${ALLURE_VERSION}-1_all.deb" || true
+            if [ -f allure.deb ] && [ -s allure.deb ]; then
+              sudo dpkg -i allure.deb || sudo apt-get install -f -y
+              if command -v allure >/dev/null 2>&1; then
+                echo "✅ Allure 通过 .deb 安装成功"
+                allure --version
+                exit 0
+              fi
+            fi
+          fi
+
+          # 方法2：解压 tgz 包
+          echo "方法2：使用 tgz 包安装"
+          curl -L --retry 3 --retry-delay 2 -o allure.tgz "https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz" || true
+          if [ -f allure.tgz ] && [ -s allure.tgz ]; then
+            tar -xzf allure.tgz
+            echo "$PWD/allure-${ALLURE_VERSION}/bin" >> $GITHUB_PATH
+            chmod +x "$PWD/allure-${ALLURE_VERSION}/bin/allure"
+            "$PWD/allure-${ALLURE_VERSION}/bin/allure" --version
+            echo "✅ Allure 通过 tgz 安装成功"
+            exit 0
+          fi
+
+          echo "❌ Allure 安装失败，后续将跳过 Allure 报告生成"
+          exit 1
 
       # ========== Step 5: 运行全量测试 ==========
       - name: 运行全量测试
@@ -60,11 +96,10 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           AI_MODE: ${{ secrets.DEEPSEEK_API_KEY != '' && 'real' || 'mock' }}
-        # continue-on-error: 即使有失败也继续生成报告
 
       # ========== Step 6: 生成 Allure 报告 ==========
       - name: 生成 Allure 报告
-        if: always()
+        if: always() && steps.install-allure.outcome == 'success'
         run: |
           allure generate reports/allure-results -o reports/allure-report --clean
 
@@ -78,7 +113,7 @@ jobs:
 
       # ========== Step 8: 上传 Allure 报告 ==========
       - name: 上传 Allure 报告
-        if: always()
+        if: always() && steps.install-allure.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
@@ -86,7 +121,7 @@ jobs:
 
       # ========== Step 9: 发布到 GitHub Pages ==========
       - name: 发布 Allure 报告到 GitHub Pages
-        if: github.ref == 'refs/heads/main' && always()
+        if: github.ref == 'refs/heads/main' && always() && steps.install-allure.outcome == 'success'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -99,6 +134,10 @@ jobs:
         if: always()
         run: |
           echo "========================================="
-          echo "  报告地址：https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
-          echo "  下载 artifact：在 Actions 页面查看 Attachments"
+          echo "  pytest-html 报告：在 Actions 页面下载 artifact 'pytest-html-report'"
+          if [ "${{ steps.install-allure.outcome }}" == "success" ]; then
+            echo "  Allure 在线报告：https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+          else
+            echo "  Allure 报告未生成（Allure CLI 安装失败）"
+          fi
           echo "========================================="
