@@ -1,0 +1,44 @@
+# ========================================================
+# Gitee Go 流水线配置
+# 功能：AI自动化测试项目 — push到main分支自动运行全量测试
+# ========================================================
+name: ai-test-pipeline
+displayName: 'AI自动化测试流水线'
+
+# 触发器：push到main分支时自动触发
+triggers:
+  push:
+    - matchType: PRECISE
+      branch: main
+      commitMessage: ''
+
+# 流水线变量（DEEPSEEK_API_KEY请在Gitee Go设置页面配置真实值）
+variables:
+  DEEPSEEK_API_KEY: ''
+
+stages:
+  # ========== 阶段：自动化测试 ==========
+  - stage:
+      name: test-stage
+      displayName: '自动化测试'
+      failFast: false
+      steps:
+        # ========== Step 1: 安装依赖 + 运行测试 ==========
+        - step: build@python
+          name: run_tests
+          displayName: '安装依赖并运行测试'
+          pythonVersion: 3.9
+          commands:
+            # 使用清华镜像加速安装
+            - pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+            - pip3 install --upgrade pip
+            # 安装项目依赖
+            - pip3 install -r requirements.txt
+            # 运行全量测试（32个测试用例）
+            # pytest.ini中已配置 --alluredir 和 --html 参数
+            - pytest tests/ -v --tb=short
+          # 构建产物：测试报告
+          artifacts:
+            - name: TEST_REPORT
+              path:
+                - ./reports/
