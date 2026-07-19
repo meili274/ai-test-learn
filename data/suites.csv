@@ -1,2 +1,2 @@
 "DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
-"","0","test_user_has_valid_email","tests","2026-07-18","broken","2026-07-18","TestUsers","test_users","",""
+"","0","test_user_has_valid_email","tests","2026-07-19","broken","2026-07-19","TestUsers","test_users","",""
